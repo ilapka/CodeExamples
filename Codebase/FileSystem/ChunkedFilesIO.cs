@@ -6,19 +6,19 @@ using UnityEngine;
 namespace Codebase.FileSystem
 {
     /// <summary>
-    /// Allows to write/read files by chunks within directory
+    /// Allows to write/read files by chunks
     /// </summary>
     public class ChunkedFilesIO
     {
-        public byte[] ReadChunk(string path, int chunkIndex)
+        public byte[] ReadChunk(string filePath, int chunkIndex)
         {
             try
             {
-                CheckFileExists(path);
+                CheckFileExists(filePath);
 
                 byte[] chunkBytes;
                 
-                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                 {
                     int chunkSize = ReadSizeOfTargetChunk(stream, chunkIndex);
                     
@@ -26,18 +26,18 @@ namespace Codebase.FileSystem
                     int bytesRead = stream.Read(chunkBytes, 0, chunkBytes.Length);
                     
                     if(bytesRead < chunkSize)
-                        throw new EndOfStreamException($"Failed to read chunk with index {chunkIndex} from {path}. File is corrupted or incomplete.");
+                        throw new EndOfStreamException($"Failed to read chunk with index {chunkIndex} from {filePath}. File is corrupted or incomplete.");
                 }
                 
 #if UNITY_EDITOR
-                StreamUtility.LogSuccessfulReading(path, chunkIndex, chunkBytes);
+                StreamUtility.LogSuccessfulReading(filePath, chunkIndex, chunkBytes);
 #endif
                 
                 return chunkBytes;
             }
             catch (Exception e)
             {
-                Debug.LogError($"Can't read chunk of file with index {chunkIndex}, path {path}. Check log exception below.");
+                Debug.LogError($"Can't read chunk of file with index {chunkIndex}, path {filePath}. Check log exception below.");
                 Debug.LogException(e);
                 return null;
             }
@@ -59,28 +59,37 @@ namespace Codebase.FileSystem
             return BitConverter.ToInt32(chunkSizeBytes, 0);
         }
 
-        public void WriteFile(string path, string directoryPath, List<byte[]> fileChunks)
+        public void WriteFile(string filePath, string directoryPath, List<byte[]> fileChunks)
         {
-            DirectoryUtils.CheckOrCreateDirectory(directoryPath);
-
-            long totalLength;
-            
-            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            try
             {
-                foreach (byte[] chunkBytes in fileChunks)
-                {
-                    //Write file chunk size
-                    stream.Write(BitConverter.GetBytes(chunkBytes.Length), 0, sizeof(int));
-                    //Write file chunk data
-                    stream.Write(chunkBytes, 0, chunkBytes.Length);
-                }
+                DirectoryUtils.CheckOrCreateDirectory(directoryPath);
 
-                totalLength = stream.Length;
-            }
+                long totalLength;
+            
+                using (var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write))
+                {
+                    foreach (byte[] chunkBytes in fileChunks)
+                    {
+                        //Write file chunk size
+                        stream.Write(BitConverter.GetBytes(chunkBytes.Length), 0, sizeof(int));
+                        //Write file chunk data
+                        stream.Write(chunkBytes, 0, chunkBytes.Length);
+                    }
+
+                    totalLength = stream.Length;
+                }
             
 #if UNITY_EDITOR
-            StreamUtility.LogSuccessfulWriting(path, fileChunks, totalLength);
+                StreamUtility.LogSuccessfulWriting(filePath, fileChunks, totalLength);
 #endif
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Can't write chunked file, path {filePath}. Check log exception below.");
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         public void DeleteFile(string path)
@@ -102,5 +111,6 @@ namespace Codebase.FileSystem
             if (!File.Exists(path))
                 throw new FileNotFoundException($"Can't find file {path}.");
         }
+        
     }
 }
